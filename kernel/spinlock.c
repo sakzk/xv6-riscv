@@ -14,6 +14,8 @@ initlock(struct spinlock *lk, char *name)
   lk->name = name;
   lk->locked = 0;
   lk->cpu = 0;
+  lk->nacquire = 0;
+  lk->ncontend = 0;
 }
 
 // Acquire the lock.
@@ -25,12 +27,17 @@ acquire(struct spinlock *lk)
   if(holding(lk))
     panic("acquire");
 
+  __sync_fetch_and_add(&lk->nacquire, 1);
+
   // On RISC-V, sync_lock_test_and_set turns into an atomic swap:
   //   a5 = 1
   //   s1 = &lk->locked
   //   amoswap.w.aq a5, a5, (s1)
-  while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
-    ;
+  if(__sync_lock_test_and_set(&lk->locked, 1) != 0) {
+    __sync_fetch_and_add(&lk->ncontend, 1);
+    while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
+      ;
+  }
 
   // Tell the C compiler and the processor to not move loads or stores
   // past this point, to ensure that the critical section's memory

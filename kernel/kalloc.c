@@ -21,22 +21,39 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+} kmem[NCPU];
+
+// Static storage for lock names ("kmem0", "kmem1", ...).
+static char locknames[NCPU][8];
 
 void
 printlockstats(void)
 {
-  printf("lock: %s: #acquire %ld #contend %ld\n",
-         kmem.lock.name, kmem.lock.nacquire, kmem.lock.ncontend);
-  // Reset counters after printing.
-  kmem.lock.nacquire = 0;
-  kmem.lock.ncontend = 0;
+  for(int i = 0; i < NCPU; i++){
+    if(kmem[i].lock.nacquire > 0 || kmem[i].lock.ncontend > 0){
+      printf("lock: %s: #acquire %ld #contend %ld\n",
+             kmem[i].lock.name, kmem[i].lock.nacquire, kmem[i].lock.ncontend);
+      // Reset counters after printing.
+      kmem[i].lock.nacquire = 0;
+      kmem[i].lock.ncontend = 0;
+    }
+  }
 }
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for(int i = 0; i < NCPU; i++){
+    locknames[i][0] = 'k';
+    locknames[i][1] = 'm';
+    locknames[i][2] = 'e';
+    locknames[i][3] = 'm';
+    locknames[i][4] = '0' + i;
+    locknames[i][5] = '\0';
+    initlock(&kmem[i].lock, locknames[i]);
+  }
+  // All free pages initially go to CPU 0's freelist.
+  // Other CPUs will steal from it as needed.
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -66,10 +83,13 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  push_off();  // disable interrupts so cpuid() is stable
+  int id = cpuid();
+  acquire(&kmem[id].lock);
+  r->next = kmem[id].freelist;
+  kmem[id].freelist = r;
+  release(&kmem[id].lock);
+  pop_off();
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -80,11 +100,32 @@ kalloc(void)
 {
   struct run *r;
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
+  push_off();  // disable interrupts so cpuid() is stable
+  int id = cpuid();
+
+  // Try our own freelist first.
+  acquire(&kmem[id].lock);
+  r = kmem[id].freelist;
   if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+    kmem[id].freelist = r->next;
+  release(&kmem[id].lock);
+
+  if(!r){
+    // Our freelist is empty. Steal a page from another CPU.
+    for(int i = 0; i < NCPU; i++){
+      if(i == id)
+        continue;
+      acquire(&kmem[i].lock);
+      r = kmem[i].freelist;
+      if(r)
+        kmem[i].freelist = r->next;
+      release(&kmem[i].lock);
+      if(r)
+        break;
+    }
+  }
+
+  pop_off();
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk

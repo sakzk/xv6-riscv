@@ -1,0 +1,55 @@
+CONDITION:
+#define PGSIZE  4096
+#define NCHILD  3       // Number of child processes (match CPUS)
+#define NPAGES  500     // Pages to allocate per round
+#define NROUND  100     // Number of alloc/free rounds per child
+
+RESULT:
+$ kalloctest
+kalloctest: start
+lock: kmem: #acquire 33014 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem: #acquire 300060 #contend 8211
+kalloctest: done
+$ kalloctest
+kalloctest: start
+lock: kmem: #acquire 74 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem: #acquire 300060 #contend 1907
+kalloctest: done
+$ kalloctest
+kalloctest: start
+lock: kmem: #acquire 74 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem: #acquire 300060 #contend 3355
+kalloctest: done
+
+
+RESULT: per-CPU freelist
+$ kalloctest
+kalloctest: start
+lock: kmem0: #acquire 32981 #contend 0
+lock: kmem1: #acquire 23 #contend 0
+lock: kmem2: #acquire 36 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem0: #acquire 101284 #contend 82
+lock: kmem1: #acquire 100199 #contend 0
+lock: kmem2: #acquire 99841 #contend 0
+kalloctest: done
+$ kalloctest
+kalloctest: start
+lock: kmem0: #acquire 74 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem0: #acquire 100040 #contend 0
+lock: kmem1: #acquire 100068 #contend 0
+lock: kmem2: #acquire 99952 #contend 0
+kalloctest: done
+$ kalloctest
+kalloctest: start
+lock: kmem0: #acquire 64 #contend 0
+lock: kmem2: #acquire 10 #contend 0
+kalloctest: 8 ticks elapsed
+lock: kmem0: #acquire 100060 #contend 0
+lock: kmem1: #acquire 100064 #contend 0
+lock: kmem2: #acquire 99936 #contend 0
+kalloctest: done

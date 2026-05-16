@@ -24,6 +24,16 @@ struct {
 } kmem;
 
 void
+printlockstats(void)
+{
+  printf("lock: %s: #acquire %ld #contend %ld\n",
+         kmem.lock.name, kmem.lock.nacquire, kmem.lock.ncontend);
+  // Reset counters after printing.
+  kmem.lock.nacquire = 0;
+  kmem.lock.ncontend = 0;
+}
+
+void
 kinit()
 {
   initlock(&kmem.lock, "kmem");

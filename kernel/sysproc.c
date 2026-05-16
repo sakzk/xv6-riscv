@@ -107,3 +107,10 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_lockstat(void)
+{
+  printlockstats();
+  return 0;
+}
